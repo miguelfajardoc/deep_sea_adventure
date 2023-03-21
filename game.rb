@@ -92,7 +92,7 @@ class DeepSeaAdventure < Gosu::Window
 
         def initialize(players)
             @players = players
-            @oxigen = 25
+            @submarine = Submarine.new
             @step = 0
             generate_treasures 
             generate_positions
@@ -102,7 +102,7 @@ class DeepSeaAdventure < Gosu::Window
         def update_oxigen
             puts "updatin oxigen"
             @players.each do |player|
-                @oxigen -= player.loot.count
+                @submarine.oxigen -= player.loot.count
             end
             if @oxigen == 0
                 check_dead_players
@@ -111,37 +111,14 @@ class DeepSeaAdventure < Gosu::Window
 
         def check_dead_players
             @players.each do |player|
-                if player.current_position != nil
+                if player.current_position != @submarine
                     player.status = :dead
                 end
             end
         end
 
-        def calculate_movement
-            value = @current_player.current_dice[0] + @current_player.current_dice[1] - @current_player.loot.count
-            return 0 if value <= 0
-            value
-        end
-
-        def calculate_next_position
-            value = calculate_movement
-            current = @current_player.current_position.index
-            i = 1
-            j = 0
-            while i < value
-                if @positions[current + i + j].player.nil?
-                    i+=1
-                else
-                    j+=1
-                end
-            end
-            @current_player.desired_position = @positions[current + i + j]
-        end
-
         def generate_treasures
-
             @treasures = []
-            
             i = 0
             (0..15).each do |value|
                 type = TYPES[i/4]
@@ -149,16 +126,19 @@ class DeepSeaAdventure < Gosu::Window
                 @treasures.append(Treasure.new(type, value))
                 i += 1
             end
-            @treasures
         end
 
         def generate_positions
-
-            @positions = []
-
+            @head = Box.new(nil)
+            @aux = @head
             @treasures.each do |treasure|
-                @positions.append(Position.new(treasure))
+                @aux.treasure = treasure
+                @aux.next = Box.new(nil)
+                @aux.next.prev = @aux
+                @aux = @aux.next
             end
+            @head.prev = @submarine
+            @submarine.next = @head
         end
 
         def process(button_name = nil, options: nil)
@@ -173,8 +153,10 @@ class DeepSeaAdventure < Gosu::Window
                     @current_player.change_direction!
                 else
                     @current_player.roll_dice
-                    @current_player.desired_position = calculate_next_position
-                    @step += 1
+                    if @current_player.steps_left == 0
+                        @step += 1
+                    end
+                    move
                 end
             when 2
                 if button_name == :pick
@@ -208,6 +190,7 @@ class DeepSeaAdventure < Gosu::Window
             @desired_position = nil
             @loot = []
             @status = :alive
+            @steps_left = 0
         end
 
         def change_direction!
@@ -220,6 +203,17 @@ class DeepSeaAdventure < Gosu::Window
 
         def roll_dice
             @current_dice = [rand(1..3), rand(1..3)]
+            @steps_left = calculate_movement
+        end
+
+        def calculate_movement
+            value = @current_dice[0] + @current_dice[1] - loot.count
+            return 0 if value <= 0
+            value
+        end
+
+        def move
+            current_position = current_position.next
         end
 
     end
@@ -236,16 +230,30 @@ class DeepSeaAdventure < Gosu::Window
 
     end
 
-    class Position
+    class Box
 
-        attr_accessor :treasure, :player
+        attr_accessor :treasure, :player, :next, :prev
 
         def initialize(treasure)
             @treasure = treasure
             @player = nil
+            @next = nil
+            @prev = nil
         end
 
     end
+
+    class Submarine
+
+        attr_accessor :oxigen
+
+        def initialize
+            @oxigen = 25
+            @next = nil
+        end
+
+    end
+
 
 
 end
