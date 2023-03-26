@@ -24,4 +24,16 @@ class Buttons
         end
         false 
     end
+
+    def enable?
+        @active
+    end
+
+    def disable!
+        @active = false
+    end
+
+    def enable!
+        @active = true
+    end
 end

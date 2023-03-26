@@ -21,11 +21,16 @@ class DeepSeaAdventure < Gosu::Window
         @buttons.append(@button_start) 
         @game = Game.new([Player.new("ass", "blue"), Player.new("aaa", "yellow")])
         @state = :menu
+        @low_treasure = Gosu::Image.new("assets/images/low_treasure.png")
+        @mid_treasure = Gosu::Image.new("assets/images/mid_treasure.png")
+        @players = [Player.new("caisy", "blue")]
+        @initial_pos = [300, 400]
     end
 
     def update
         if @state == :game
-            p "game"
+            @button_start.disable!
+            setup
         elsif @state == :players
             generate_players
             setup
@@ -43,12 +48,12 @@ class DeepSeaAdventure < Gosu::Window
     end
 
     def button_down(id)
+        puts mouse_x, mouse_y
         case id
         when Gosu::KB_ESCAPE
             close
         when Gosu::MS_LEFT
-            element = nil
-            element =  element_clicked
+            element = element_clicked
             unless element.nil?
                 puts element.process
                 element.process.call
@@ -58,7 +63,9 @@ class DeepSeaAdventure < Gosu::Window
 
     def element_clicked
         @buttons.each do |button|
-            return button if button.clicked?(mouse_x, mouse_y)
+            if button.enable?
+                return button if button.clicked?(mouse_x, mouse_y)
+            end
         end
         nil
     end
@@ -70,6 +77,7 @@ class DeepSeaAdventure < Gosu::Window
         if @state == :game
             #@submarine.draw(0,0,3, scale_x = 0.1, scale_y = 0.1)
             @submarine.draw(30,100,3)
+            draw_treasures
         elsif @state == :players
             p "player"
         elsif @state == :menu
@@ -81,6 +89,17 @@ class DeepSeaAdventure < Gosu::Window
         end
     end
 
+    def draw_treasures
+        aux = @game.head
+        while !aux.next.nil?
+            if aux.treasure.type == :square
+                @mid_treasure.draw(aux.pos_x, aux.pos_y, 1)
+            else
+                @low_treasure.draw(aux.pos_x, aux.pos_y, 1)
+            end
+            aux = aux.next
+        end
+    end
 
 
 
@@ -88,14 +107,16 @@ class DeepSeaAdventure < Gosu::Window
 
         TYPES = [:triangular, :square, :pentagonal, :hexagonal]
 
-        attr_accessor :current_player
+        attr_accessor :current_player, :head
 
         def initialize(players)
             @players = players
             @submarine = Submarine.new
             @step = 0
+            @initial_pos = [300, 400]
             generate_treasures 
             generate_positions
+            generate_position_maping
             @current_player = @players.first
         end
 
@@ -130,15 +151,50 @@ class DeepSeaAdventure < Gosu::Window
 
         def generate_positions
             @head = Box.new(nil)
-            @aux = @head
-            @treasures.each do |treasure|
-                @aux.treasure = treasure
-                @aux.next = Box.new(nil)
-                @aux.next.prev = @aux
-                @aux = @aux.next
+            aux = @head
+            TYPES.each do |type|
+                treasures_type = @treasures.filter {|t| t.type == type}
+                while !treasures_type.empty?
+                    sample = treasures_type.sample
+                    aux.treasure = sample
+                    aux.next = Box.new(nil)
+                    aux.next.prev = aux
+                    aux = aux.next
+                    treasures_type -= [sample]
+                end      
             end
             @head.prev = @submarine
             @submarine.next = @head
+        end
+
+        def generate_position_maping
+            @head.pos_x = @initial_pos[0]
+            @head.pos_y = @initial_pos[1]
+            desp_x = 60
+            desp_y = 5
+            aux = @head.next
+            x = @initial_pos[0]
+            y = @initial_pos[1]
+            dir_x = -1
+            dir_y = 1
+            flag = 'x'
+            while !aux.nil?
+                if flag == 'y'
+                    desp_x = 60
+                    desp_y = 5
+                end
+                if  x + desp_x * dir_x < 0 || x + desp_x * dir_x > WITH - 50
+                    dir_x *= -1
+                    desp_x = 0
+                    desp_y = 62
+                    flag = 'y'
+                end
+                x += desp_x * dir_x
+                y += desp_y * dir_y
+                aux.pos_x = x
+                aux.pos_y = y
+                aux = aux.next
+            end
         end
 
         def process(button_name = nil, options: nil)
@@ -156,7 +212,7 @@ class DeepSeaAdventure < Gosu::Window
                     if @current_player.steps_left == 0
                         @step += 1
                     end
-                    move
+                    @current_player.move
                 end
             when 2
                 if button_name == :pick
@@ -176,6 +232,7 @@ class DeepSeaAdventure < Gosu::Window
                 @current_player = @players.first
             end
         end
+
     end
 
     class Player
@@ -214,6 +271,10 @@ class DeepSeaAdventure < Gosu::Window
 
         def move
             current_position = current_position.next
+            while !current_position.player.nil?
+                current_position = current_position.next
+            end
+            current_position.player = self
         end
 
     end
@@ -232,20 +293,22 @@ class DeepSeaAdventure < Gosu::Window
 
     class Box
 
-        attr_accessor :treasure, :player, :next, :prev
+        attr_accessor :treasure, :player, :next, :prev, :pos_x, :pos_y
 
         def initialize(treasure)
             @treasure = treasure
             @player = nil
             @next = nil
             @prev = nil
+            @pos_x = 0
+            @pos_y = 0
         end
 
     end
 
     class Submarine
 
-        attr_accessor :oxigen
+        attr_accessor :oxigen, :next
 
         def initialize
             @oxigen = 25
