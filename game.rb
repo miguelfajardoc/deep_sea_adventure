@@ -3,6 +3,7 @@ require_relative 'buttons'
 
 WITH = 600
 HEIGHT = 800
+#TODO: Revisar los movimientos cuando se va a devolver, con prev 
 
 class DeepSeaAdventure < Gosu::Window
 
@@ -17,20 +18,22 @@ class DeepSeaAdventure < Gosu::Window
         @background_image_2 = Gosu::Image.new("assets/images/submarine_title.png")
         @start_text = Gosu::Image.from_text("Start", 30, options = {bold: true})
         @button_start = Buttons.new(250, 400, Gosu::Image.from_blob(150, 40, rgba = "\1\107\140\155" * (150 * 40)), &self.method(:start))
+        @button_dice = Buttons.new(415, 405, Gosu::Image.new("assets/images/dice/Side_1_Pip.png"), &self.method(:roll_dice))
         @submarine = Gosu::Image.new("assets/images/submarine2.png")
-        @buttons.append(@button_start) 
-        @game = Game.new([Player.new("ass", "blue"), Player.new("aaa", "yellow")])
+        @buttons= [@button_start, @button_dice]
         @state = :menu
         @low_treasure = Gosu::Image.new("assets/images/low_treasure.png")
         @mid_treasure = Gosu::Image.new("assets/images/mid_treasure.png")
-        @players = [Player.new("caisy", "blue")]
+        @high_treasure = Gosu::Image.new("assets/images/high_treasure.png")
+        @very_high_treasure = Gosu::Image.new("assets/images/very_high_treasure.png")
         @initial_pos = [300, 400]
+        @roll_sound = Gosu::Sample.new("assets/sounds/dice-3.wav")
     end
 
     def update
         if @state == :game
             @button_start.disable!
-            setup
+            
         elsif @state == :players
             generate_players
             setup
@@ -39,12 +42,15 @@ class DeepSeaAdventure < Gosu::Window
     end
 
     def setup
+        create_players
         @game = Game.new(@players)
+        @game.process
     end
 
     def start
         puts "start"
         @state = :game
+        setup
     end
 
     def button_down(id)
@@ -78,6 +84,8 @@ class DeepSeaAdventure < Gosu::Window
             #@submarine.draw(0,0,3, scale_x = 0.1, scale_y = 0.1)
             @submarine.draw(30,100,3)
             draw_treasures
+            draw_players
+            draw_dice
         elsif @state == :players
             p "player"
         elsif @state == :menu
@@ -89,15 +97,48 @@ class DeepSeaAdventure < Gosu::Window
         end
     end
 
+    def create_players
+        @players = [Player.new("caisy", "blue", Gosu::Image.new("assets/images/divers/diver_blue.png")),
+            Player.new("kala", "green", Gosu::Image.new("assets/images/divers/diver_green.png"))]
+
+    end
+
+    def roll_dice
+        @roll_sound.play
+        @game.process(:roll)
+        
+        #@button_dice.image.draw()
+    end
+
+    def draw_dice
+        @button_dice.image.draw(@button_dice.position_x, @button_dice.position_y, 2, scale_x=0.1, scale_y = 0.1)
+    end
+
     def draw_treasures
         aux = @game.head
         while !aux.next.nil?
-            if aux.treasure.type == :square
-                @mid_treasure.draw(aux.pos_x, aux.pos_y, 1)
-            else
+            case aux.treasure.type
+            when :triangular
                 @low_treasure.draw(aux.pos_x, aux.pos_y, 1)
+            when :square
+                @mid_treasure.draw(aux.pos_x, aux.pos_y, 1)
+            when :pentagonal
+                @high_treasure.draw(aux.pos_x, aux.pos_y, 1)
+            when :hexagonal
+                @very_high_treasure.draw(aux.pos_x, aux.pos_y, 1)
             end
             aux = aux.next
+        end
+    end
+
+    def draw_players
+        @players.each do |player|
+            player.calculate_rendered_position unless player.current_position == player.rendered_position
+            if player.down? && player.rendered_position.class != Submarine
+                player.image.draw_rot(player.rendered_position.pos_x, player.rendered_position.pos_y, z = 3, angle = 180)
+            else
+                player.image.draw(player.rendered_position.pos_x, player.rendered_position.pos_y,3)
+            end
         end
     end
 
@@ -107,17 +148,23 @@ class DeepSeaAdventure < Gosu::Window
 
         TYPES = [:triangular, :square, :pentagonal, :hexagonal]
 
-        attr_accessor :current_player, :head
+        attr_accessor :current_player, :head, :initial_pos, :submarine
 
         def initialize(players)
-            @players = players
-            @submarine = Submarine.new
-            @step = 0
             @initial_pos = [300, 400]
+            @submarine = Submarine.new(314, 322)
+            @players = setup_players(players)
+            @step = 0
             generate_treasures 
             generate_positions
             generate_position_maping
             @current_player = @players.first
+        end
+
+        def setup_players(players)
+            players.each do |p|
+                p.current_position = @submarine
+            end
         end
 
         def update_oxigen
@@ -208,11 +255,10 @@ class DeepSeaAdventure < Gosu::Window
                 if button_name == :direction
                     @current_player.change_direction!
                 else
+                    puts "rolling"
                     @current_player.roll_dice
-                    if @current_player.steps_left == 0
-                        @step += 1
-                    end
                     @current_player.move
+                    @step += 1
                 end
             when 2
                 if button_name == :pick
@@ -237,17 +283,19 @@ class DeepSeaAdventure < Gosu::Window
 
     class Player
 
-        attr_accessor :loot, :name, :color, :current_dice, :current_position, :desired_position
+        attr_accessor :loot, :name, :color, :current_dice, :current_position, :rendered_position, :image
 
-        def initialize(name, color)
+        def initialize(name, color, image)
             @name = name
             @color = color
             @direction = :down
             @current_position = nil
-            @desired_position = nil
+            @rendered_position = nil
             @loot = []
             @status = :alive
             @steps_left = 0
+            @image = image
+            @clock = nil
         end
 
         def change_direction!
@@ -270,11 +318,34 @@ class DeepSeaAdventure < Gosu::Window
         end
 
         def move
-            current_position = current_position.next
-            while !current_position.player.nil?
-                current_position = current_position.next
+
+            aux = @current_position
+            while @steps_left != 0
+                aux = aux.next
+                while !aux.player.nil? 
+                    aux = aux.next
+                end                
+                @steps_left -=1
             end
-            current_position.player = self
+            @current_position.player = nil unless @current_position.class == Submarine
+            @current_position = aux
+            
+        end
+
+        def down?
+            @direction == :down
+        end
+
+        def calculate_rendered_position
+            if @rendered_position.nil?
+                @rendered_position = @current_position
+                return
+            end
+            @clock = Time.now if @clock == nil
+            if Time.now - @clock > 0.5
+                @rendered_position = @rendered_position.next
+                @clock = nil
+            end
         end
 
     end
@@ -308,11 +379,13 @@ class DeepSeaAdventure < Gosu::Window
 
     class Submarine
 
-        attr_accessor :oxigen, :next
+        attr_accessor :oxigen, :next, :pos_x, :pos_y
 
-        def initialize
+        def initialize(x,y)
             @oxigen = 25
             @next = nil
+            @pos_x = x
+            @pos_y = y
         end
 
     end

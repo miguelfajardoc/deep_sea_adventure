@@ -14,6 +14,7 @@ class Buttons
     end
 
     def clicked?(mouse_x, mouse_y)
+        puts "clicked?:"
         puts mouse_x, mouse_y
         puts @position_x, @position_y
         if mouse_x >= @position_x && mouse_x < (@position_x + size_x)
