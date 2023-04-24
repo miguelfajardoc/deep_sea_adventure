@@ -17,8 +17,8 @@ class DeepSeaAdventure < Gosu::Window
         @background_image = Gosu::Image.from_blob(WITH, HEIGHT, rgba = "\4\105\142\255" * (WITH * HEIGHT))
         @background_image_2 = Gosu::Image.new("assets/images/submarine_title.png")
         @start_text = Gosu::Image.from_text("Start", 30, options = {bold: true})
-        @button_start = Buttons.new(250, 400, Gosu::Image.from_blob(150, 40, rgba = "\1\107\140\155" * (150 * 40)), &self.method(:start))
-        @button_dice = Buttons.new(415, 405, Gosu::Image.new("assets/images/dice/Side_1_Pip.png"), &self.method(:roll_dice))
+        @button_start = Buttons.new(250, 400, {image: Gosu::Image.from_blob(150, 40, rgba = "\1\107\140\155" * (150 * 40))}, &self.method(:start))
+        @button_dice = Buttons.new(415, 405, {images: [Gosu::Image.new("assets/images/dice/Side_1_Pip.png"), Gosu::Image.new("assets/images/dice/Side_2_Pips.png"), Gosu::Image.new("assets/images/dice/Side_3_Pips.png")]}, &self.method(:roll_dice))
         @submarine = Gosu::Image.new("assets/images/submarine2.png")
         @buttons= [@button_start, @button_dice]
         @state = :menu
@@ -106,12 +106,21 @@ class DeepSeaAdventure < Gosu::Window
     def roll_dice
         @roll_sound.play
         @game.process(:roll)
+        p @game.current_player.current_dice
         
         #@button_dice.image.draw()
     end
 
     def draw_dice
-        @button_dice.image.draw(@button_dice.position_x, @button_dice.position_y, 2, scale_x=0.1, scale_y = 0.1)
+        if @game.current_player.current_dice.nil?
+            @button_dice.images.first.draw(@button_dice.position_x, @button_dice.position_y, 2, scale_x=0.05, scale_y = 0.05)
+            @button_dice.images.first.draw(@button_dice.position_x + @button_dice.size_x * 0.05, @button_dice.position_y, 2, scale_x=0.05, scale_y = 0.05)
+        else
+            dice =  @game.current_player.current_dice
+
+            @button_dice.images[dice[0]-1].draw(@button_dice.position_x, @button_dice.position_y, 2, scale_x=0.05, scale_y = 0.05)
+            @button_dice.images[dice[1]-1].draw(@button_dice.position_x + @button_dice.size_x * 0.05, @button_dice.position_y, 2, scale_x=0.05, scale_y = 0.05)
+        end
     end
 
     def draw_treasures
@@ -249,9 +258,11 @@ class DeepSeaAdventure < Gosu::Window
             puts @step
             case @step
             when 0
+                puts "0"
                 update_oxigen
                 @step += 1
             when 1
+                puts "1"
                 if button_name == :direction
                     @current_player.change_direction!
                 else
@@ -261,6 +272,7 @@ class DeepSeaAdventure < Gosu::Window
                     @step += 1
                 end
             when 2
+                puts "2"
                 if button_name == :pick
                     @current_player.loot.append(@positions[@current_player.current_position].treasure)
                     @current_player.current_position.treasure = Treasure.new(:blank, nil)
