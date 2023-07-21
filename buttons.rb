@@ -17,9 +17,9 @@ class Buttons
 
     def clicked?(mouse_x, mouse_y)
         
-        puts "mouse: x: #{mouse_x}, y: #{mouse_y}"
-        puts "position: x: #{@position_x}, y:#{@position_y}"
-        puts "position and size: x: #{@position_x + @size_x}, y: #{@position_y + @size_y}"
+        #puts "mouse: x: #{mouse_x}, y: #{mouse_y}"
+        #puts "position: x: #{@position_x}, y:#{@position_y}"
+        #puts "position and size: x: #{@position_x + @size_x}, y: #{@position_y + @size_y}"
         if mouse_x >= @position_x && mouse_x < (@position_x + @size_x)
             if mouse_y >= @position_y && mouse_y < (@position_y + @size_y)
                 puts "clicked?: #{@name}"
@@ -34,12 +34,12 @@ class Buttons
     end
 
     def disable!
-        #puts "Disabling #{name}"
+        puts "Disabling #{name}" unless @active == false
         @active = false
     end
 
     def enable!
-        #puts "Enabling #{name}"
+        puts "Enabling #{name}" unless @active  == true
         @active = true
     end
 

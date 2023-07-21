@@ -110,7 +110,6 @@ class DeepSeaAdventure < Gosu::Window
         when Gosu::MS_LEFT
             element = element_clicked
             unless element.nil?
-                puts element.process
                 element.process.call
             end
         end
@@ -128,16 +127,14 @@ class DeepSeaAdventure < Gosu::Window
 
     def draw
         @background_image.draw(0,0,0)
-        
-
         if @state == :game
             #@submarine.draw(0,0,3, scale_x = 0.1, scale_y = 0.1)
             @submarine.draw(30,100,3)
             draw_treasures
             draw_players
             draw_dice
-            draw_go_up if @game.current_player.current_position.class != Submarine && @game.current_player.direction == :down
-            if @game.step == 2
+            draw_go_up if @game.current_player.current_position.class != Submarine && @game.current_player.direction == :down && @game.step == 1
+            if @game.step == 2 && !@game.current_player.is_moving?
                 @button_dice.disable! if @button_dice.enable?
                 draw_pick if @game.current_player.can_pick?
                 draw_drop if @game.current_player.can_drop?
@@ -169,19 +166,23 @@ class DeepSeaAdventure < Gosu::Window
     def pick
         #pick_sound.play
         @game.process(:pick)
-        @button_pick.disable! 
+        @button_pick.disable!
+        @button_skip.disable!
     end
 
     def drop
         #drop_sound.play
         @game.process(:drop)
-        @button_drop.disable! 
+        @button_drop.disable!
+        @button_skip.disable! 
     end
 
     def skip
         #drop_sound.play
         @game.process(:skip)
-        @button_skip.disable! 
+        @button_skip.disable!
+        @button_pick.disable!
+        @button_drop.disable!
     end
 
     def go_up
@@ -197,7 +198,7 @@ class DeepSeaAdventure < Gosu::Window
     end
 
     def draw_drop
-        @button_drop.enable! unless @button_pick.enable?
+        @button_drop.enable! unless @button_drop.enable?
         @button_drop.image.draw(@button_drop.position_x, @button_drop.position_y)
     end
 
@@ -365,15 +366,13 @@ class DeepSeaAdventure < Gosu::Window
 
         def process(button_name = nil, options: nil)
             #puts "#{@players.first.name}'s turn #{@players.first.color}"
-            puts @step
+            puts "Step #{@step}"
             case @step
             when 0
-                puts "0"
                 update_oxigen
                 @step += 1
                 puts "Turno jugador #{@current_player.name}, lleva #{@current_player.loot.count} tesoros"
             when 1
-                puts "1"
                 if button_name == :direction
                     @current_player.change_direction!
                 else
@@ -387,7 +386,6 @@ class DeepSeaAdventure < Gosu::Window
                     @step += 1
                 end
             when 2
-                puts "2"
                 if button_name == :pick
                     @current_player.loot.append(@current_player.current_position.treasure)
                     @current_player.current_position.treasure = Treasure.new(:empty, 0)
@@ -404,6 +402,9 @@ class DeepSeaAdventure < Gosu::Window
             if @current_player.nil?
                 @current_player = @players.first
             end
+            if @current_player.return == true
+                next_player
+            end
             @step = 0
         end
 
@@ -412,7 +413,7 @@ class DeepSeaAdventure < Gosu::Window
     class Player
 
         attr_accessor :loot, :name, :color, :current_dice, :current_position, :rendered_position, :image, :status
-        attr_reader :steps_left, :direction
+        attr_reader :steps_left, :direction, :return
 
         def initialize(name, color, image)
             @name = name
@@ -426,6 +427,7 @@ class DeepSeaAdventure < Gosu::Window
             @image = image
             @clock = nil
             @status = :alive
+            @return = false
         end
 
         def change_direction!
@@ -448,9 +450,9 @@ class DeepSeaAdventure < Gosu::Window
         end
 
         def move_down
-
+            puts "moving_down"
             aux = @current_position
-            while @steps_left != 0
+            while @steps_left != 0 && !aux.nil?
                 aux = aux.next
                 while !aux.player.nil? 
                     aux = aux.next
@@ -464,19 +466,19 @@ class DeepSeaAdventure < Gosu::Window
         end
 
         def move_up
-
+            puts "moving_up"
             aux = @current_position
-            while @steps_left != 0
+            while @steps_left != 0 && aux.class != Submarine
                 aux = aux.prev
-                while !aux.player.nil? 
+                while aux.class != Submarine && !aux.player.nil? 
                     aux = aux.prev
                 end                
                 @steps_left -=1
             end
             @current_position.player = nil unless @current_position.class == Submarine
-            aux.player = self
+            aux.player = self unless aux.class == Submarine
             @current_position = aux
-            
+            @return = true if @current_position.class == Submarine
         end
 
         def down?
@@ -490,17 +492,25 @@ class DeepSeaAdventure < Gosu::Window
             end
             @clock = Time.now if @clock == nil
             if Time.now - @clock > 0.5
-                @rendered_position = @rendered_position.next
+                if @direction == :down
+                    @rendered_position = @rendered_position.next
+                else
+                    @rendered_position = @rendered_position.prev
+                end
                 @clock = nil
             end
         end
 
         def can_pick?
-            @current_position.treasure.type != :empty 
+            @current_position.treasure&.type != :empty 
         end
 
         def can_drop?
-            @current_position.treasure.type == :empty && !@loot.empty?
+            @current_position.treasure&.type == :empty && !@loot.empty?
+        end
+
+        def is_moving?
+            @rendered_position != @current_position
         end
 
     end
@@ -535,12 +545,14 @@ class DeepSeaAdventure < Gosu::Window
     class Submarine
 
         attr_accessor :oxigen, :next, :pos_x, :pos_y
+        attr_reader :treasure
 
         def initialize(x,y)
             @oxigen = 25
             @next = nil
             @pos_x = x
             @pos_y = y
+            @treasure = nil
         end
 
     end
